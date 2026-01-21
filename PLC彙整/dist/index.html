@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Untitled</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>PLC 報表解析 - 精確欄位排除版</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; padding: 15px; background-color: #f0f2f5; }
+        .container { max-width: 100%; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .upload-section { border: 2px dashed #1890ff; padding: 20px; text-align: center; margin-bottom: 20px; background: #e6f7ff; cursor: pointer; }
+        .table-wrapper { width: 100%; overflow-x: auto; margin-bottom: 30px; border: 1px solid #d9d9d9; }
+        
+        table { border-collapse: collapse; table-layout: auto; width: 1px; }
+        th { 
+            background-color: #001529; color: white; 
+            padding: 5px 4px; font-size: 12px;
+            max-width: 80px; word-break: break-all; 
+            white-space: normal; line-height: 1.2;
+            position: sticky; top: 0; z-index: 10;
+            cursor: pointer; user-select: none;
+        }
+        th:hover { background-color: #1890ff; }
+        th::after { content: ' ↕'; font-size: 10px; opacity: 0.3; }
+
+        td { 
+            border: 1px solid #d9d9d9; padding: 4px 2px; 
+            font-size: 13px; text-align: center;
+            white-space: nowrap; min-width: 45px; 
+        }
+        /* 前兩欄：狀態與機台代號稍微寬一點 */
+        td:nth-child(1), td:nth-child(2) { min-width: 60px; white-space: normal; }
+
+        .file-header { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
+        .file-title { background: #52c41a; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 14px; }
+        .btn-remove { background: #ff4d4f; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+
+        .total-row { background-color: #fffbe6 !important; font-weight: bold; color: #d46b08; }
+        .ratio-row { background-color: #e6f7ff !important; font-weight: bold; color: #0050b3; }
+        .highlight-red { background-color: #ff4d4f !important; color: white !important; }
+        
+        tr.data-row { cursor: grab; }
+        .hint { font-size: 12px; color: #666; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📊 PLC 報表解析 (精確排除非數據欄位)</h2>
+    <div class="hint">💡 <b>計算邏輯：</b> 已排除標題含「組別」、「代號」之欄位。雙擊標題可排序，雙擊數值可變紅底。</div>
+    <div class="upload-section" onclick="document.getElementById('upload-input').click()">
+        <strong>📁 點擊選取 Excel 檔案匯入</strong>
+        <input type="file" id="upload-input" accept=".xls,.xlsx" multiple style="display:none">
+    </div>
+    <div id="table-container"></div>
+</div>
+
+<script>
+    let sortOrders = {};
+
+    document.getElementById('upload-input').addEventListener('change', function(e) {
+        const files = e.target.files;
+        const container = document.getElementById('table-container');
+        container.innerHTML = '';
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const content = event.target.result;
+                let data = [];
+                // 處理 HTML 格式或真正的 Excel
+                if (content.includes('<table') || content.includes('<tr')) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(content, 'text/html');
+                    const rows = doc.querySelectorAll('tr');
+                    rows.forEach(row => {
+                        const cells = Array.from(row.querySelectorAll('th, td')).map(td => td.innerText.trim());
+                        if (cells.length > 0) data.push(cells);
+                    });
+                } else {
+                    const workbook = XLSX.read(content, { type: 'binary' });
+                    data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                }
+                if (data.length > 0) renderTable(file.name, data);
+            };
+            reader.readAsText(file);
+        });
+    });
+
+    function renderTable(fileName, data) {
+        const container = document.getElementById('table-container');
+        const tableId = 'table-' + Math.random().toString(36).substr(2, 9);
+        
+        // 1. 定位欄位索引 (增加更多可能的標題名稱)
+        let machineIdx = -1;
+        let defectIdx = -1;
+        const headers = data[0];
+        
+        headers.forEach((h, idx) => {
+            const headText = (h || "").toString().trim();
+            // 只要標題包含 機台、機器、名稱、設備 均視為機台欄位
+            if (headText.includes('機台') || headText.includes('機器') || headText.includes('名稱') || headText.includes('設備')) {
+                machineIdx = idx;
+            }
+            // 只要標題包含 不良數、總不良 均視為不良數欄位
+            if (headText.includes('不良數') || headText.includes('總不良')) {
+                defectIdx = idx;
+            }
+        });
+
+        let html = `
+            <div class="file-header">
+                <div class="file-title">📄 ${fileName}</div>
+                <button class="btn-remove" onclick="removeSelected('${tableId}')">🗑 移除選取</button>
+            </div>
+            <div class="table-wrapper">
+                <table id="full-${tableId}">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;">狀態</th>
+                            ${headers.map((h, idx) => `<th ondblclick="sortTable('${tableId}', ${idx + 1})">${h || ''}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody id="${tableId}">`;
+
+        // 2. 篩選並渲染資料
+        for (let i = 1; i < data.length; i++) {
+            const rowData = data[i];
+            // 跳過空行
+            if (!rowData || rowData.length === 0 || !rowData.join('').trim()) continue;
+
+            let shouldSkip = false;
+            
+            // A. 過濾「外觀」字樣
+            if (machineIdx !== -1) {
+                const machineName = (rowData[machineIdx] || "").toString();
+                if (machineName.includes('外觀')) {
+                    shouldSkip = true;
+                }
+            }
+            
+            // B. 過濾不良數為 0 的行
+            if (defectIdx !== -1) {
+                const defectRaw = (rowData[defectIdx] || "0").toString().replace(/,/g, '').replace('%', '');
+                const defectVal = parseFloat(defectRaw);
+                if (defectVal === 0 || isNaN(defectVal)) {
+                    shouldSkip = true;
+                }
+            }
+
+            if (shouldSkip) continue; // 符合條件就不顯示，也不計入合計
+
+            html += `<tr class="data-row">
+                <td><input type="checkbox" class="row-check"></td>
+                ${rowData.map(cell => `<td ondblclick="toggleHighlight(this)">${cell || ''}</td>`).join('')}
+            </tr>`;
+        }
+        
+        html += `</tbody><tfoot id="foot-${tableId}"></tfoot></table></div>`;
+        
+        container.insertAdjacentHTML('beforeend', html);
+        updateCalculations(tableId);
+        Sortable.create(document.getElementById(tableId), { animation: 150 });
+    }
+
+    window.sortTable = function(tableId, colIndex) {
+        const tbody = document.getElementById(tableId);
+        const rows = Array.from(tbody.querySelectorAll('tr.data-row'));
+        const orderKey = `${tableId}-${colIndex}`;
+        sortOrders[orderKey] = sortOrders[orderKey] === 'desc' ? 'asc' : 'desc';
+        const isDesc = sortOrders[orderKey] === 'desc';
+
+        rows.sort((a, b) => {
+            let valA = a.cells[colIndex].innerText.replace(/,/g, '');
+            let valB = b.cells[colIndex].innerText.replace(/,/g, '');
+            let numA = parseFloat(valA), numB = parseFloat(valB);
+            if (!isNaN(numA) && !isNaN(numB)) return isDesc ? numB - numA : numA - numB;
+            return isDesc ? valB.localeCompare(valA, 'zh-Hant') : valA.localeCompare(valB, 'zh-Hant');
+        });
+        rows.forEach(row => tbody.appendChild(row));
+    };
+
+    function removeSelected(tableId) {
+        const tbody = document.getElementById(tableId);
+        const checks = tbody.querySelectorAll('.row-check:checked');
+        if (checks.length === 0) return;
+        if (confirm('確定移除選中項目？')) {
+            checks.forEach(chk => chk.closest('tr').remove());
+            updateCalculations(tableId);
+        }
+    }
+
+    function updateCalculations(tableId) {
+        const tbody = document.getElementById(tableId);
+        const tfoot = document.getElementById('foot-' + tableId);
+        const rows = tbody.querySelectorAll('tr.data-row');
+        const headers = document.querySelectorAll(`#full-${tableId} th`);
+        const colCount = headers.length;
+        
+        let totals = new Array(colCount).fill(0);
+        let hasNumber = new Array(colCount).fill(false);
+        let isCalculatable = new Array(colCount).fill(true); // 標記該欄位是否需要加總
+        let productionIdx = -1;
+
+        // 偵測哪些欄位需要排除
+        headers.forEach((th, idx) => {
+            const title = th.innerText;
+            if (title.includes('生產數')) productionIdx = idx;
+            
+            // 排除清單：包含組別、代號、ID、率、% 的標題不計算合計
+            const blacklist = ['組別', '代號', 'ID', '率', '%', '料號', '人機比', '標準工', '工時', 'PPH', '時間', '次數'];
+            if (blacklist.some(key => title.includes(key))) {
+                isCalculatable[idx] = false;
+            }
+        });
+
+        // 進行加總
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            cells.forEach((td, idx) => {
+                if (idx > 0 && isCalculatable[idx]) {
+                    let val = td.innerText.replace(/,/g, '');
+                    if (!isNaN(val) && val !== '') {
+                        totals[idx] += parseFloat(val);
+                        hasNumber[idx] = true;
+                    }
+                }
+            });
+        });
+
+        const prodTotal = productionIdx !== -1 ? totals[productionIdx] : 0;
+        
+        // 生成合計列
+        let footHtml = `<tr class="total-row"><td>-</td><td>合計</td>`;
+        for (let j = 2; j < colCount; j++) {
+            let val = (isCalculatable[j] && hasNumber[j]) ? Math.round(totals[j] * 100) / 100 : "";
+            footHtml += `<td ondblclick="toggleHighlight(this)">${val}</td>`;
+        }
+        
+        // 生成比率列
+        footHtml += `</tr><tr class="ratio-row"><td>-</td><td>比率</td>`;
+        for (let j = 2; j < colCount; j++) {
+            let ratio = (j !== productionIdx && isCalculatable[j] && hasNumber[j] && prodTotal > 0) 
+                        ? ((totals[j] / prodTotal) * 100).toFixed(2) + "%" : "";
+            footHtml += `<td ondblclick="toggleHighlight(this)">${ratio}</td>`;
+        }
+        tfoot.innerHTML = footHtml + `</tr>`;
+    }
+
+    function toggleHighlight(element) { element.classList.toggle('highlight-red'); }
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>
