@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>PLC 報表解析 - 強力相容版</title>
+    <title>PLC 報表解析</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -45,8 +45,8 @@
 <body>
 
 <div class="container">
-    <h2>📊 PLC 報表解析 (強力相容版)</h2>
-    <div class="hint">💡 <b>操作說明：</b> 若按鈕無法直接複製，系統會自動下載圖片，或顯示在下方供您右鍵複製。</div>
+    <h2>📊 PLC 報表解析</h2>
+    
     <div class="upload-section" onclick="document.getElementById('upload-input').click()">
         <strong>📁 點擊選取 Excel 檔案匯入</strong>
         <input type="file" id="upload-input" accept=".xls,.xlsx" multiple style="display:none">
@@ -61,11 +61,20 @@
 </div>
 
 <script>
-    // [設定區] 未來若有更多不想被複製(截圖)的標題，請直接加進這個清單
+    // ==========================================
+    // [設定區]
+    // ==========================================
+    
+    // 1. 截圖排除清單：產生圖片時會隱藏的欄位
     const ignoreKeywords = [
         'OEE', '標準PPH', '實際PPH', '總故障時間', 
         '總故障次數', '平均排除時間', '每百次故障次數', '標準人機比'
     ];
+
+    // 2. 機台排除清單：匯入時「名稱包含」以下字眼則跳過
+    const excludeMachines = ['外觀檢測機', '外觀'];
+
+    // ==========================================
 
     let sortOrders = {};
 
@@ -105,10 +114,10 @@
 
         let machineIdx = -1;
         let defectIdx = -1;
-        const headers = data[0];
+        const headers = data[0].map(h => (h || '').toString().trim()); // 預處理標題，去除空白
         
         headers.forEach((h, idx) => {
-            if (h.includes('機台')) machineIdx = idx;
+            if (h.includes('機器名稱')) machineIdx = idx;
             if (h.includes('不良品數') || h.includes('總不良數')) defectIdx = idx;
         });
 
@@ -126,10 +135,9 @@
                         <tr>
                             <th style="width:30px;" data-html2canvas-ignore>狀態</th>
                             ${headers.map((h, idx) => {
-                                // 判斷是否在排除清單中
-                                const shouldIgnore = ignoreKeywords.some(key => (h || '').includes(key));
+                                const shouldIgnore = ignoreKeywords.some(key => h.includes(key));
                                 const ignoreAttr = shouldIgnore ? ' data-html2canvas-ignore' : '';
-                                return `<th${ignoreAttr} ondblclick="sortTable('${tableId}', ${idx + 1})">${h || ''}</th>`;
+                                return `<th${ignoreAttr} ondblclick="sortTable('${tableId}', ${idx + 1})">${h}</th>`;
                             }).join('')}
                         </tr>
                     </thead>
@@ -137,20 +145,32 @@
 
         for (let i = 1; i < data.length; i++) {
             const rowData = data[i];
-            if (rowData.length === 0 || !rowData.join('') || rowData[0] === headers[0]) continue;
+            // 排除空行
+            if (!rowData || rowData.length === 0 || !rowData.join('').trim()) continue;
+            // 排除重複的標題行
+            if (rowData[0] === data[0][0]) continue;
             
             let shouldSkip = false;
-            if (machineIdx !== -1 && rowData[machineIdx] && rowData[machineIdx].includes('外觀')) shouldSkip = true;
-            if (defectIdx !== -1) {
+
+            // [強化檢查] 判斷機台是否需排除
+            if (machineIdx !== -1 && rowData[machineIdx]) {
+                const currentMachine = rowData[machineIdx].toString().trim(); // 去除 Excel 儲存格前後空格
+                if (excludeMachines.some(key => currentMachine.includes(key))) {
+                    shouldSkip = true;
+                }
+            }
+
+            // 判斷不良數為 0 是否排除 [cite: 50]
+            if (defectIdx !== -1 && rowData[defectIdx] !== undefined) {
                 let defectVal = parseFloat(rowData[defectIdx].toString().replace(/,/g, ''));
                 if (defectVal === 0 || isNaN(defectVal)) shouldSkip = true;
             }
+
             if (shouldSkip) continue;
 
             html += `<tr class="data-row">
                 <td data-html2canvas-ignore><input type="checkbox" class="row-check"></td>
                 ${rowData.map((cell, idx) => {
-                    // 根據當前欄位的標題判斷是否需在截圖中隱藏
                     const hName = headers[idx] || '';
                     const shouldIgnore = ignoreKeywords.some(key => hName.includes(key));
                     const ignoreAttr = shouldIgnore ? ' data-html2canvas-ignore' : '';
@@ -176,7 +196,7 @@
 
         try {
             const canvas = await html2canvas(element, {
-                scale: 1,
+                scale: 2, // 提高解析度
                 backgroundColor: "#ffffff",
                 useCORS: true
             });
@@ -213,7 +233,7 @@
         imgTag.src = imgData;
         manualArea.style.display = 'block';
         manualArea.scrollIntoView({ behavior: 'smooth' });
-        alert('⚠️ 注意：由於瀏覽器安全性限制（本地檔案），無法自動複製。\n\n✅ 已為您自動下載圖片！\n👇 或者您也可以在下方顯示的圖片上按「右鍵 -> 複製影像」。');
+        alert('⚠️ 注意：無法自動複製。\n\n✅ 已自動下載圖片！\n👇 或在下方圖片「右鍵 -> 複製影像」。');
     }
 
     window.sortTable = function(tableId, colIndex) {
@@ -247,7 +267,7 @@
         const tbody = document.getElementById(tableId);
         const tfoot = document.getElementById('foot-' + tableId);
         const rows = tbody.querySelectorAll('tr.data-row');
-        const headers = document.querySelectorAll(`#full-${tableId} th`);
+        const headers = Array.from(document.querySelectorAll(`#full-${tableId} th`));
         const colCount = headers.length;
         let totals = new Array(colCount).fill(0);
         let hasNumber = new Array(colCount).fill(false);
@@ -278,22 +298,18 @@
         
         let footHtml = `<tr class="total-row"><td data-html2canvas-ignore>-</td><td>合計</td>`;
         for (let j = 2; j < colCount; j++) {
-            // 合計列也根據標題關鍵字決定是否排除
             const hName = headers[j].innerText;
             const shouldIgnore = ignoreKeywords.some(key => hName.includes(key));
             const ignoreAttr = shouldIgnore ? ' data-html2canvas-ignore' : '';
-
             let val = (isCalculatable[j] && hasNumber[j]) ? Math.round(totals[j] * 100) / 100 : "";
             footHtml += `<td${ignoreAttr} ondblclick="toggleHighlight(this)">${val}</td>`;
         }
         
         footHtml += `</tr><tr class="ratio-row"><td data-html2canvas-ignore>-</td><td>比率</td>`;
         for (let j = 2; j < colCount; j++) {
-            // 比率列同樣執行排除判斷
             const hName = headers[j].innerText;
             const shouldIgnore = ignoreKeywords.some(key => hName.includes(key));
             const ignoreAttr = shouldIgnore ? ' data-html2canvas-ignore' : '';
-
             let ratio = (j !== productionIdx && isCalculatable[j] && hasNumber[j] && prodTotal > 0) 
                         ? ((totals[j] / prodTotal) * 100).toFixed(2) + "%" : "";
             footHtml += `<td${ignoreAttr} ondblclick="toggleHighlight(this)">${ratio}</td>`;
