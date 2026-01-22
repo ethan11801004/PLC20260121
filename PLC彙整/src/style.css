@@ -1,0 +1,32 @@
+ body { font-family: "Microsoft JhengHei", sans-serif; padding: 15px; background-color: #f0f2f5; }
+        .container { max-width: 100%; margin: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .upload-section { border: 2px dashed #1890ff; padding: 20px; text-align: center; margin-bottom: 20px; background: #e6f7ff; cursor: pointer; }
+        .table-wrapper { width: 100%; overflow-x: auto; margin-bottom: 30px; border: 1px solid #d9d9d9; background: white; }
+        table { border-collapse: collapse; table-layout: auto; width: 100%; background: white; }
+        th { 
+            background-color: #001529; color: white; 
+            padding: 5px 4px; font-size: 12px;
+            max-width: 80px; word-break: break-all; 
+            white-space: normal; line-height: 1.2;
+            position: sticky; top: 0; z-index: 10;
+            cursor: pointer; user-select: none;
+        }
+        th:hover { background-color: #1890ff; }
+        th::after { content: ' ↕'; font-size: 10px; opacity: 0.3; }
+        td { border: 1px solid #d9d9d9; padding: 4px 2px; font-size: 13px; text-align: center; white-space: nowrap; min-width: 45px; }
+        td:nth-child(1), td:nth-child(2) { min-width: 60px; white-space: normal; }
+        .file-header { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; margin-bottom: 5px; }
+        .file-title { background: #52c41a; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 14px; }
+        .btn-group { display: flex; gap: 10px; }
+        .btn-remove { background: #ff4d4f; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .btn-copy { background: #1890ff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .btn-copy:hover { background: #40a9ff; }
+        .total-row { background-color: #fffbe6 !important; font-weight: bold; color: #d46b08; }
+        .ratio-row { background-color: #e6f7ff !important; font-weight: bold; color: #0050b3; }
+        .highlight-red { background-color: #ff4d4f !important; color: white !important; }
+        tr.data-row { cursor: grab; }
+        .hint { font-size: 12px; color: #666; margin-bottom: 10px; }
+        #manual-copy-area { margin-top: 20px; border-top: 20px solid #f0f2f5; padding-top: 20px; display: none; }
+        #manual-copy-area h3 { color: #d46b08; font-size: 16px; margin-bottom: 5px; }
+        #manual-copy-area p { color: #666; font-size: 13px; margin: 0 0 10px 0; }
+        #generated-image { border: 5px solid #1890ff; max-width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
